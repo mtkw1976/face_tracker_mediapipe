@@ -1,0 +1,22 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Large MediaPipe source tree and built packages
+mediapipe/
+*.whl
+*.deb
+
+# Temporary test captures and images
+*.jpg
+*.jpeg
+*.png
+*.log
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
+*.swp
+*~

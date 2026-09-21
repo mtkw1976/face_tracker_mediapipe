@@ -1,0 +1,6 @@
+# Python package dependencies for Jetson Nano Face Tracker
+# Note: OpenCV with GStreamer support and MediaPipe with GPU delegate
+# should be installed via system packages and custom aarch64 wheel.
+
+adafruit-circuitpython-servokit>=1.3.0
+numpy>=1.19.4

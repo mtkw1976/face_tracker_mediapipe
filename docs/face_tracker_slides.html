@@ -1,0 +1,709 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jetson Nano × MediaPipe 60FPS 顔追尾システム解説スライド</title>
+<style>
+  :root {
+    --primary: #1a73e8;
+    --primary-dark: #0d47a1;
+    --primary-light: #e8f0fe;
+    --text-main: #202124;
+    --text-muted: #5f6368;
+    --bg-page: #0f172a;
+    --bg-slide: #ffffff;
+    --border-color: #dadce0;
+    --code-bg: #282c34;
+    --code-color: #abb2bf;
+    --success: #0f9d58;
+    --warning: #f4b400;
+    --danger: #d93025;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Hiragino Kaku Gothic ProN", Meiryo, sans-serif;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
+  }
+
+  #presentation-container {
+    position: relative;
+    width: 1100px;
+    height: 650px;
+    background: var(--bg-slide);
+    border-radius: 12px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .slide {
+    display: none;
+    flex-direction: column;
+    height: 100%;
+    padding: 40px 60px;
+    animation: fadeIn 0.3s ease-in-out;
+    overflow-y: auto;
+  }
+
+  .slide.active {
+    display: flex;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-header {
+    margin-bottom: 24px;
+    border-bottom: 2px solid var(--primary);
+    padding-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+
+  .slide-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--primary-dark);
+  }
+
+  .slide-subtitle {
+    font-size: 14px;
+    color: var(--text-muted);
+  }
+
+  .slide-content {
+    flex: 1;
+    font-size: 19px;
+    line-height: 1.6;
+    color: var(--text-main);
+  }
+
+  /* Components */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 15px 0;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin: 15px 0;
+  }
+
+  .card {
+    background: #f8fafc;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    padding: 18px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .card h3 {
+    font-size: 18px;
+    color: var(--primary);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .card p, .card li {
+    font-size: 15px;
+    color: var(--text-main);
+    line-height: 1.5;
+  }
+
+  .card ul {
+    margin-left: 20px;
+  }
+
+  .highlight-box {
+    background: var(--primary-light);
+    border-left: 5px solid var(--primary);
+    padding: 12px 18px;
+    border-radius: 4px;
+    margin: 15px 0;
+    font-size: 16px;
+  }
+
+  .warning-box {
+    background: #fef3c7;
+    border-left: 5px solid var(--warning);
+    padding: 12px 18px;
+    border-radius: 4px;
+    margin: 15px 0;
+    font-size: 16px;
+  }
+
+  pre {
+    background: var(--code-bg);
+    color: var(--code-color);
+    padding: 14px 18px;
+    border-radius: 8px;
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    font-size: 14px;
+    line-height: 1.45;
+    overflow-x: auto;
+    margin: 12px 0;
+  }
+
+  code {
+    font-family: Consolas, Monaco, "Courier New", monospace;
+    background: #f1f5f9;
+    color: var(--danger);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.9em;
+  }
+
+  pre code {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    color: white;
+  }
+  .badge-success { background-color: var(--success); }
+  .badge-primary { background-color: var(--primary); }
+
+  /* Navigation Toolbar */
+  #controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 30px;
+    background: #f1f5f9;
+    border-top: 1px solid var(--border-color);
+    user-select: none;
+  }
+
+  .btn {
+    background: white;
+    border: 1px solid var(--border-color);
+    color: var(--text-main);
+    padding: 6px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.15s;
+  }
+
+  .btn:hover {
+    background: var(--primary-light);
+    border-color: var(--primary);
+    color: var(--primary);
+  }
+
+  #progress-text {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  /* Title Slide Specific */
+  .title-slide {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    height: 100%;
+    padding: 60px 40px;
+  }
+
+  .main-title {
+    font-size: 38px;
+    font-weight: 800;
+    color: var(--primary-dark);
+    line-height: 1.3;
+    margin-bottom: 16px;
+  }
+
+  .sub-title {
+    font-size: 20px;
+    color: var(--text-muted);
+    margin-bottom: 35px;
+  }
+
+  .meta-tag {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 14px;
+    margin: 0 4px;
+  }
+</style>
+</head>
+<body>
+
+<div id="presentation-container">
+
+  <!-- SLIDE 1: Title -->
+  <div class="slide title-slide active">
+    <div style="font-size: 14px; color: var(--primary); font-weight: bold; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;">
+      Robotics & Edge AI Technical Presentation
+    </div>
+    <h1 class="main-title">Jetson Nano × MediaPipe<br>60 FPS リアルタイム顔追尾システム</h1>
+    <p class="sub-title">〜 エッジAI・非同期プログラミング・制御工学の実践入門 〜</p>
+    <div style="margin-top: 10px;">
+      <span class="meta-tag">対象: プログラミング初学者・大学生</span>
+      <span class="meta-tag">対象コード: face_tracker_mediapipe.py</span>
+      <span class="meta-tag">言語: Python 3</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: What is this system? -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">1. このシステムは何をしているのか？</div>
+      <div class="slide-subtitle">全体概要と目標</div>
+    </div>
+    <div class="slide-content">
+      <p>人間の顔をカメラで見つけ、カメラを載せた2軸モータが<strong>「1秒間に60回（60 FPS）」</strong>の滑らかさで視線を追尾し続けるシステムです。</p>
+      
+      <div class="grid-2" style="margin-top: 25px;">
+        <div class="card">
+          <h3>👀 みる（コンピュータビジョン）</h3>
+          <ul>
+            <li>CSIカメラから高品位映像をキャプチャ</li>
+            <li>エッジAI（MediaPipe BlazeFace）が顔の位置・鼻先を高速特定</li>
+            <li>画面中心からの「ズレ（偏差）」をリアルタイム計算</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>🤖 うごく（制御工学 & メカ）</h3>
+          <ul>
+            <li>PDフィードバック制御で適切な速度を算出</li>
+            <li>左右（Pan）と上下（Tilt）のサーボモータを駆動</li>
+            <li>顔を見失った時は自動で周囲を捜査（自律パトロール）</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="highlight-box">
+        💡 <strong>工学的な見どころ：</strong> 単なるAIの動体検知だけでなく、<strong>「推論の高速化」「描画の非同期化」「モータの物理保護」</strong>が1本のコードに凝縮されています。
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: Hardware Architecture -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">2. ハードウェア構成（全体アーキテクチャ）</div>
+      <div class="slide-subtitle">Jetson Nanoを中心とするエコシステム</div>
+    </div>
+    <div class="slide-content">
+      <p>手のひらサイズのシングルボードPC <strong>NVIDIA Jetson Nano</strong> が頭脳として動作します。</p>
+      
+      <div class="grid-3" style="margin-top: 20px;">
+        <div class="card">
+          <h3>🧠 Jetson Nano</h3>
+          <p><strong>Maxwell GPU（128コア）</strong>を搭載。PC用の重いディープラーニングモデルを現場（エッジ）で直接推論可能。</p>
+        </div>
+        <div class="card">
+          <h3>🎥 CSIカメラ (IMX219)</h3>
+          <p>USBと違い、GPU直結のMIPI-CSIバスで接続。CPUに負荷をかけずに1280x720 60FPSの生映像をDMA転送。</p>
+        </div>
+        <div class="card">
+          <h3>⚡ PCA9685 & サーボ</h3>
+          <p>I2C通信（アドレス0x40）で制御する16ch PWM基板。高精度なパルス幅（500〜2400μs）でサーボ角を滑らかに維持。</p>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 15px; background: #f1f5f9;">
+        <strong>データの流れ：</strong>
+        <code>カメラ映像 [MIPI-CSI]</code> ➔ <code>Jetson GPU [推論・座標計算]</code> ➔ <code>PCA9685 [I2C通信]</code> ➔ <code>モータ駆動 [PWM]</code>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: Why ordinary code fails -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">3. なぜ普通のコードでは 60 FPS が出ないのか？</div>
+      <div class="slide-subtitle">ボトルネックの正体</div>
+    </div>
+    <div class="slide-content">
+      <p>入門書にある単純なループを書くと、<strong>10〜15 FPS（カクカク）</strong>まで性能が落ちてしまいます。</p>
+
+      <pre><code># ❌ 初心者がやりがちな同期直列ループ（15 FPS前後で破綻）
+while True:
+    ret, frame = cap.read()       # ① カメラ画像取得待機 (約16ms)
+    faces = detector.detect(frame)# ② CPUでのAI推論 (約50〜80ms) ⚠️激重
+    servo.set_angle(...)          # ③ I2C通信でモータ更新 (約5ms)
+    cv2.imshow("Track", frame)    # ④ X11ウィンドウ画面描画 (約20ms) ⚠️重い
+    cv2.waitKey(1)
+    # 合計: 100ms以上 ➔ 1秒間に10回しか回らない！</code></pre>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>⚠️ ボトルネック①：CPU演算の限界</h3>
+          <p>一般的な顔検出DNNは数十万回の積和演算を行うため、Jetsonの省電力ARM CPUでは処理しきれません。</p>
+        </div>
+        <div class="card">
+          <h3>⚠️ ボトルネック②：GUI描画の待ち時間</h3>
+          <p><code>imshow</code> や文字・矩形の描画はOSのGUIサーバと通信するため、追従モータの更新まで止めてしまいます。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: Solution 1: GPU Delegation -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">4. 解決策①：MediaPipe & GPUデリゲート</div>
+      <div class="slide-subtitle">8.5ms の超高速顔推論</div>
+    </div>
+    <div class="slide-content">
+      <p>本コードでは、Googleの超軽量顔検出モデル <strong>BlazeFace</strong> を <strong>OpenGL ES 3.2 GPUデリゲート</strong> で動作させています。</p>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>CPU推論 (通常)</h3>
+          <ul>
+            <li>推論時間: <strong>40〜70 ms</strong></li>
+            <li>FPS: 15〜20 FPS 程度</li>
+            <li>CPU 4コアが100%になり発熱</li>
+          </ul>
+        </div>
+        <div class="card" style="border-color: var(--success); background: #f0fdf4;">
+          <h3>🚀 GPUデリゲート (本スクリプト)</h3>
+          <ul>
+            <li>推論時間: <strong>わずか 8.5 ms！</strong></li>
+            <li>FPS: <strong>55〜60 FPS 安定動作</strong></li>
+            <li>GPUのシェーダ並列処理でCPUがほぼ空き状態</li>
+          </ul>
+        </div>
+      </div>
+
+      <pre><code># GStreamerハードウェアパイプライン (nvvidconvでGPU内でリサイズ & 双線形補間)
+csi_pipeline = (
+    "nvarguscamerasrc ! "
+    "video/x-raw(memory:NVMM), width=1280, height=720, format=NV12, framerate=60/1 ! "
+    "nvvidconv flip-method=0 interpolation-method=1 ! "
+    "video/x-raw, width=640, height=360, format=BGRx ! videoconvert ! ..."
+)</code></pre>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: Solution 2: Multithreading & Queue -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">5. 解決策②：非同期マルチスレッド設計</div>
+      <div class="slide-subtitle">キューを用いた完全疎結合パイプライン</div>
+    </div>
+    <div class="slide-content">
+      <p><strong>「顔を追うコア制御ループ」</strong>と<strong>「画面に映すGUIスレッド」</strong>を完全に独立させています。</p>
+
+      <div class="card" style="margin: 20px 0; background: #f8fafc;">
+        <div style="display: flex; align-items: center; justify-content: space-around; text-align: center;">
+          <div style="background: var(--primary-light); padding: 15px; border-radius: 8px; width: 38%;">
+            <strong>🚀 メイン制御スレッド</strong><br>
+            <span style="font-size: 13px;">カメラ取得 ➔ GPU推論 ➔ サーボPD更新</span><br>
+            <span class="badge badge-success" style="margin-top: 5px;">60 FPS 固定</span>
+          </div>
+          <div style="font-size: 24px; color: var(--primary);">➔ 📬 Queue ➔</div>
+          <div style="background: #f1f5f9; padding: 15px; border-radius: 8px; width: 38%;">
+            <strong>🖥️ GUI描画スレッド</strong><br>
+            <span style="font-size: 13px;">HUD文字・2Dレーダー・imshow</span><br>
+            <span class="badge badge-primary" style="margin-top: 5px;">独立描画 (約40〜60FPS)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="highlight-box">
+        💡 <strong><code>queue.Queue(maxsize=1)</code> の極意：</strong><br>
+        キューの長さをあえて「1」に制限。もし画面描画が一瞬引っかかっても、古いフレームは即座に捨てて<strong>常に最新フレームのみ</strong>を表示。モータ制御への遅延波及（レイテンシ爆発）をゼロにします。
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: Feedback Control (PD Control) -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">6. 制御工学：ただ回すだけでは振動して止まらない！</div>
+      <div class="slide-subtitle">PD制御（比例・微分フィードバック）</div>
+    </div>
+    <div class="slide-content">
+      <p>顔が右にズレた時に「ズレの分だけ右にモータを回す（比例＝P制御）」だけだと、慣性で行き過ぎて左右に激しく振動（ハンチング）します。</p>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>P制御（比例項）</h3>
+          <p><code>Kp × 誤差 (err)</code></p>
+          <p>ズレが大きいほど強く回す「バネ」の役割。これだけだと目標を行き過ぎて揺れ続ける。</p>
+        </div>
+        <div class="card" style="border-color: var(--primary);">
+          <h3>D制御（微分項）★超重要</h3>
+          <p><code>Kd × 変化速度 (d_err / dt)</code></p>
+          <p>急激に目標に近づくと逆向きの力をかける「ダンパー（油圧ブレーキ）」の役割！ピタッと静止する。</p>
+        </div>
+      </div>
+
+      <pre><code># SafeServoController.update() 内の実装
+err_x = target_norm_x - 0.5                      # 画面中心からの偏差 (-0.5 〜 +0.5)
+d_err_x = (err_x - self.prev_err_x) / dt         # 偏差の変化速度 (微分)
+
+# P項で引っ張り、D項でブレーキをかけてピタッと止める
+step_pan = self.PAN_DIR * (err_x * self.KP_PAN + d_err_x * self.KD_PAN)
+step_pan = max(-self.MAX_DELTA, min(self.MAX_DELTA, step_pan)) # 振り切れ遮断</code></pre>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: Safe Engineering -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">7. ロボットを壊さないための安全設計</div>
+      <div class="slide-subtitle">実機ハードウェア制御の必須知識</div>
+    </div>
+    <div class="slide-content">
+      <p>プログラムが暴走しても、物理モータのプラスチックギアを破損（ギア欠け）させない3重の防護策を組み込んでいます。</p>
+
+      <div class="grid-3" style="margin-top: 18px;">
+        <div class="card">
+          <h3>1. 可動域ソフトウェアリミット</h3>
+          <p>サーボの物理限界（0°/180°）の手前で強制クランプ。<br>
+          <code>PAN: 20°〜160°</code><br>
+          <code>TILT: 35°〜145°</code></p>
+        </div>
+        <div class="card">
+          <h3>2. 変位角リミッター (MAX_DELTA)</h3>
+          <p>1回の更新での最大変化量を <code>1.0°</code> に制限。誤検出による急激な振り切れや衝撃を物理遮断。</p>
+        </div>
+        <div class="card">
+          <h3>3. 不感帯 (デッドゾーン)</h3>
+          <p>画面中央 ±3.5% 以内は出力をゼロに。微小なノイズによるサーボの唸り（ジジジ音）と発熱・磨耗を防止。</p>
+        </div>
+      </div>
+
+      <div class="highlight-box" style="margin-top: 15px;">
+        🛡️ <strong>ソフトリターン（安全終了）：</strong><br>
+        <code>Ctrl+C</code> や <code>'q'</code> キーで終了した際、<code>finally</code> 節でカクンと倒れるのを防ぎ、徐々に安全な初期位置（Pan 90°, Tilt 75°）へゆっくり戻してから安全に終了します。
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: Active Search (Patrol) -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">8. 自律捜査モード（顔を見失ったら？）</div>
+      <div class="slide-subtitle">状態遷移マシン & 2D空間パトロール</div>
+    </div>
+    <div class="slide-content">
+      <p>顔が画面から消えた際、ロボットはインテリジェントな状態遷移マシンとして振る舞います。</p>
+
+      <div class="grid-2" style="margin-top: 15px;">
+        <div class="card">
+          <h3>1. HOLD（位置保持：1秒間）</h3>
+          <p>瞬きや障害物の横切りで慌てて動かないよう、直近の角度を1秒間キープ。</p>
+          <h3 style="margin-top: 12px;">2. SEARCHING（自律走査）</h3>
+          <p>1秒以上見失うと、首を振って周囲を探索。人が座る目線高さ（Tilt 55°〜95°）を優先してスキャン。</p>
+        </div>
+        <div class="card">
+          <h3>選べる2つの探索パターン</h3>
+          <ul>
+            <li><strong>Wave スキャン（デフォルト）：</strong><br>
+            PanとTiltを異なる周期で同時に連続波状駆動し、2D空間をくまなく探す。</li>
+            <li><strong>Raster スキャン：</strong><br>
+            左右を端まで見たら高さを段階的に切り替えるステップ式走査。</li>
+          </ul>
+          <p style="margin-top: 10px; font-size: 13px; color: var(--text-muted);">
+            ※画面右下には現在カメラがどこを探しているかを示す「2DレーダーHUD」をリアルタイム表示！
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 10: Real Debugging Case -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">9. 実践トラブルシューティング事例</div>
+      <div class="slide-subtitle">なぜ「80cm離れると顔検出できない」が起きたのか？</div>
+    </div>
+    <div class="slide-content">
+      <div class="warning-box">
+        <strong>🚨 実際に発生した課題：</strong>「カメラから80cm離れると、目の前にいるのに顔検出が全く動かなくなる」
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h3>🔍 解析された根本原因</h3>
+          <ol style="margin-left: 20px; font-size: 14px;">
+            <li><strong>着座アイレベルの幾何学的ズレ：</strong><br>
+            初期チルト90°（水平）では、80cm離れた人の顔は画面上端ギリギリに見切れていた（見切れるとAIスコアが0.24へ激減）。</li>
+            <li><strong>縮小補間の劣化：</strong><br>
+            ハードウェア縮小が最近傍法（Nearest）だったため、遠方の顔の目や鼻のエッジが間引かれていた。</li>
+            <li><strong>探索方向の逆転：</strong><br>
+            チルト探索が床（下向き）を走査していた。</li>
+          </ol>
+        </div>
+        <div class="card" style="border-color: var(--success); background: #f0fdf4;">
+          <h3>✨ エンジニアリングによる解決</h3>
+          <ol style="margin-left: 20px; font-size: 14px;">
+            <li>初期チルトを人の着座目線（<code>Tilt = 75°</code>）に変更。</li>
+            <li>GStreamerに双線形補間（<code>interpolation-method=1</code>）と解像度向上（640x360）を適用。</li>
+            <li>信頼度しきい値を背景ノイズが出ない最適値（0.4〜0.6）に調整。</li>
+          </ol>
+          <p style="margin-top: 8px; font-size: 14px; font-weight: bold; color: var(--success);">
+            ➔ 80cm先での検出成功率が 0% から 100%（信頼度スコア 95%）へ劇的改善！
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 11: Code Structure -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">10. コード全体の設計マップ</div>
+      <div class="slide-subtitle">約650行の洗練されたモジュール構成</div>
+    </div>
+    <div class="slide-content">
+      <pre><code>face_tracker_mediapipe.py
+├── 1. parse_args()                # コマンドライン引数設定（プリセット・解像度・しきい値）
+├── 2. class SafeServoController   # サーボ物理保護・PDフィードバック制御・自律捜査
+│      ├── __init__()              # I2C PCA9685初期化 & 初期角度設定
+│      ├── update()                # 偏差からPD制御量を計算して出力 (50-60Hz)
+│      ├── handle_face_lost()      # ロスト時のHOLD / SEARCHING 状態遷移
+│      └── smooth_reset_to_center()# 終了時のソフトリターン (急停止防止)
+├── 3. get_camera_capture()        # GStreamer CSI/USBカメラのハードウェア初期化
+├── 4. display_worker()            # 非同期GUI描画スレッド（HUDテキスト・2Dレーダー描画）
+└── 5. main()                      # メイン推論ループ（GPU Warmup・シグナルハンドラ・クリーンアップ）</code></pre>
+      
+      <div class="highlight-box">
+        🎓 <strong>良いコードの条件：</strong><br>
+        「画像入力」「AI推論」「制御アルゴリズム」「画面描画」が疎結合（パーツ同士が独立）になっており、将来の改造（物体追従への変更やモータの変更など）が非常に簡単です。
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 12: Summary & Next Steps -->
+  <div class="slide">
+    <div class="slide-header">
+      <div class="slide-title">11. まとめ & さらなる発展へのステップ</div>
+      <div class="slide-subtitle">講義・研究への応用</div>
+    </div>
+    <div class="slide-content">
+      <div class="grid-2">
+        <div class="card">
+          <h3>本システムで学んだ工学エッセンス</h3>
+          <ul>
+            <li><strong>エッジコンピューティング：</strong> GPUデリゲートを活用し小型PCの限界性能を引き出す。</li>
+            <li><strong>パイプライン並列化：</strong> マルチスレッドとキューで重い処理を非同期化する。</li>
+            <li><strong>制御理論の実装：</strong> 物理現象（慣性・ギア摩擦・振動）を数式（PD制御）で抑え込む。</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>🚀 発展課題（卒研・個人開発ネタ）</h3>
+          <ul>
+            <li><strong>カルマンフィルタの導入：</strong> 激しく動く人の軌道を確率的に予測して先回り追尾。</li>
+            <li><strong>顔認証の追加：</strong> 「特定の人（自分）」だけを識別して追尾する機能。</li>
+            <li><strong>深度センサ連携：</strong> RealSense等の3D距離カメラを使い、前後距離に応じたズーム連動。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div style="text-align: center; margin-top: 30px;">
+        <p style="font-size: 22px; font-weight: bold; color: var(--primary-dark);">
+          ソフトウェアと物理世界が連動する面白さを、ぜひ体験してみてください！
+        </p>
+        <p style="font-size: 15px; color: var(--text-muted); margin-top: 8px;">
+          実行コマンド: <code>python3 face_tracker_mediapipe.py --preset large --conf 0.6</code>
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Navigation Footer -->
+  <div id="controls">
+    <button class="btn" id="prev-btn" onclick="prevSlide()">◀ 前のスライド (←)</button>
+    <div id="progress-text">Slide 1 / 12</div>
+    <button class="btn" id="next-btn" onclick="nextSlide()">次のスライド (→ / Space) ▶</button>
+  </div>
+
+</div>
+
+<script>
+  let currentSlide = 0;
+  const slides = document.querySelectorAll('.slide');
+  const progressText = document.getElementById('progress-text');
+  const prevBtn = document.getElementById('prev-btn');
+  const nextBtn = document.getElementById('next-btn');
+
+  function updateSlide() {
+    slides.forEach((slide, index) => {
+      slide.classList.toggle('active', index === currentSlide);
+    });
+    progressText.textContent = `Slide ${currentSlide + 1} / ${slides.length}`;
+    prevBtn.disabled = currentSlide === 0;
+    nextBtn.disabled = currentSlide === slides.length - 1;
+    prevBtn.style.opacity = currentSlide === 0 ? "0.4" : "1";
+    nextBtn.style.opacity = currentSlide === slides.length - 1 ? "0.4" : "1";
+  }
+
+  function nextSlide() {
+    if (currentSlide < slides.length - 1) {
+      currentSlide++;
+      updateSlide();
+    }
+  }
+
+  function prevSlide() {
+    if (currentSlide > 0) {
+      currentSlide--;
+      updateSlide();
+    }
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+      nextSlide();
+    } else if (e.key === 'ArrowLeft' || e.key === 'Backspace') {
+      prevSlide();
+    } else if (e.key === 'Home') {
+      currentSlide = 0;
+      updateSlide();
+    } else if (e.key === 'End') {
+      currentSlide = slides.length - 1;
+      updateSlide();
+    } else if (e.key === 'f' || e.key === 'F') {
+      const elem = document.getElementById('presentation-container');
+      if (!document.fullscreenElement) {
+        elem.requestFullscreen().catch(err => {});
+      } else {
+        document.exitFullscreen().catch(err => {});
+      }
+    }
+  });
+
+  updateSlide();
+</script>
+</body>
+</html>
