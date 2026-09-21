@@ -74,13 +74,29 @@ sudo apt-get install -y python3-pip python3-dev i2c-tools
 pip3 install -r requirements.txt
 ```
 
-### 2. I2C アクセス権限の付与
+### 2. MediaPipe (GPU デリゲート対応ビルド) のインストール
+本システムは Jetson Nano の Maxwell GPU (OpenGL ES 3.2) で BlazeFace を推論（約 8.5ms）するため、GPU デリゲートを有効化して aarch64 向けにビルドした Python 3.6 用 wheel を使用します。
+
+環境に合わせて以下のいずれかの方法でインストールしてください：
+
+- **方法 A: GitHub Releases から直接ワンライナーでインストール (推奨)**
+  ```bash
+  pip3 install https://github.com/mtkw1976/face_tracker_mediapipe/releases/download/v1.0.0/mediapipe-dev-cp36-cp36m-linux_aarch64.whl
+  ```
+  *(※ リポジトリの Releases に wheel ファイルをアセットとして登録して使用します)*
+
+- **方法 B: ローカルのビルド済み wheel を指定してインストール**
+  ```bash
+  pip3 install mediapipe/dist/mediapipe-dev-cp36-cp36m-linux_aarch64.whl
+  ```
+
+### 3. I2C アクセス権限の付与
 ```bash
 sudo usermod -aG i2c $USER
 # 反映のため一度ログアウトして再ログインするか、再起動してください
 ```
 
-### 3. I2C 接続の確認
+### 4. I2C 接続の確認
 ```bash
 i2cdetect -y -r 1
 # アドレス 0x40 が表示されれば接続成功です
